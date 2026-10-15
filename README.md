@@ -1,151 +1,173 @@
-# HỆ THỐNG PHÁT HIỆN XÂM NHẬP (IDS) 2 GIAI ĐOẠN CHO MICROSERVICES SỬ DỤNG DEEP LEARNING
+Dưới đây là nội dung hoàn chỉnh của file README.md theo chuẩn tài liệu dự án kỹ
+thuật (Technical Project Documentation). Bạn chỉ cần tạo file tên README.md ngay
+tại thư mục gốc của dự án (~/ids-microservices/README.md) và dán toàn bộ nội
+dung sau vào.
 
-> **Đồ án 3:** Nghiên cứu, thiết kế và xây dựng giải pháp giám sát an ninh mạng, phát hiện xâm nhập/bất thường thời gian thực cho hạ tầng Microservices cục bộ sử dụng mô hình Deep Learning lai 2 giai đoạn.  
-> **Tên đề tài tiếng Anh:** *A Two-Stage Intelligent Intrusion Detection System for Microservices: Combining Unsupervised Anomaly Detection and Supervised Hybrid Deep Learning for Automated Threat Classification*.
+File này giải thích toàn diện từ bài toán, kiến trúc hệ thống 4 tầng, pipeline
+AI 2 giai đoạn, luồng hoạt động đến hướng dẫn cài đặt và kiểm tra.
+
+# 🛡️ Two-Stage AI-Driven Intrusion Detection System (IDS) for Local Microservices/Cloud Infrastructure
+
+> **Tên đề tài tiếng Anh:** *A Two-Stage Intelligent Intrusion Detection System for Microservices: Combining Unsupervised Anomaly Detection and Supervised Hybrid Deep Learning for Automated Threat Classification*  
+> **Môn học:** Đồ án 3 (Chuyên ngành An toàn thông tin / Khoa học máy tính)  
+> **Môi trường triển khai:** Docker / Docker Compose trên nền tảng Linux (Ubuntu Server) thông qua VS Code CLI.
 
 ---
 
-## 1. TỔNG QUAN VỀ KIẾN TRÚC TOÀN BỘ HỆ THỐNG (SYSTEM ARCHITECTURE)
+## 📌 1. Giới thiệu tổng quan
 
-Hệ thống được thiết kế theo mô hình **Pipeline 4 tầng (4-Tier Closed-Loop Architecture)** hoạt động khép kín và tự động hóa:
+Trong môi trường Microservices đóng gói container (Docker/Cloud), việc giám sát an ninh bằng phương pháp dựa trên luật (Rule-based) hoặc chỉ phân tích gói tin mạng tĩnh truyền thống bộc lộ nhiều điểm yếu:
+- Tỉ lệ báo động giả (False Positive) cao do lưu lượng nội bộ thay đổi liên tục.
+- Không phát hiện được các mối đe dọa mới xuất hiện (Zero-day attacks).
+- Tiêu tốn nhiều tài nguyên hệ thống nếu mô hình Deep Learning quá nặng.
+
+Dự án này đề xuất một **Kiến trúc IDS 2 giai đoạn (Two-Stage Pipeline)** kết hợp giữa **Học không giám sát (Unsupervised)** và **Học sâu lai có giám sát (Supervised Hybrid Deep Learning)**, tích hợp trực tiếp vào hạ tầng giám sát log thời gian thực với **Promtail + Grafana Loki**.
+
+---
+
+## 🏗️ 2. Sơ đồ kiến trúc tổng thể (System Architecture)
+
+Hệ thống được tổ chức thành 4 phân tầng độc lập theo luồng dữ liệu (Data Pipeline) từ lúc sinh log cho tới khi đưa ra cảnh báo:
 
 
-+-----------------------------------------------------------------------------+
-| TẦNG 1: ỨNG DỤNG NGUỒN (CONTAINERIZED MICROSERVICES TIER)                   |
-|  - Web API Service (Node.js/Express)                                        |
-|  - Log Driver: Docker stdout/stderr (JSON format)                           |
-+-----------------------------------------------------------------------------+
-                                      │
-                                      ▼ (Mount /var/run/docker.sock)
-+-----------------------------------------------------------------------------+
-| TẦNG 2: THU THẬP VÀ VẬN CHUYỂN DỮ LIỆU (DATA COLLECTION TIER)                |
-|  - Promtail Agent (Docker Service Discovery)                                |
-|  - Tự động bắt dòng log, gán nhãn container metadata                        |
-+-----------------------------------------------------------------------------+
-                                      │
-                                      ▼ (HTTP Push: Cổng 3100)
-+-----------------------------------------------------------------------------+
-| TẦNG 3: LƯU TRỮ VÀ QUẢN TRỊ TẬP TRUNG (STORAGE & OBSERVABILITY TIER)         |
-|  - Grafana Loki: Lưu trữ log dạng nén, đánh chỉ mục theo nhãn               |
-|  - Mở LogQL Engine & HTTP API cho các dịch vụ bên ngoài truy vấn             |
-+-----------------------------------------------------------------------------+
-                                      │
-                                      ▼ (Fetch Stream Log / LogQL API)
-+-----------------------------------------------------------------------------+
-| TẦNG 4: ĐỘNG CƠ TRÍ TUỆ NHÂN TẠO 2 GIAI ĐOẠN (AI/DL INTRUSION ENGINE TIER)   |
-|                                                                             |
-|  [Giai đoạn 1: Unsupervised Anomaly Detection]                              |
-|   - Mô hình: LSTM Autoencoder                                               |
-|   - Nhiệm vụ: Lọc hành vi bình thường, tính Reconstruction Error            |
-|       ├─ Error < Threshold  ──> Ghi nhận Normal                             |
-|       └─ Error >= Threshold ──> Kích hoạt Giai đoạn 2                       |
-|                                     │                                       |
-|                                     ▼                                       |
-|  [Giai đoạn 2: Supervised Threat Classification & Alerting]                 |
-|   - Mô hình: Hybrid CNN-BiLSTM with Attention Mechanism                     |
-|   - Nhiệm vụ: Phân loại tấn công (DDoS, Brute-force, Injection...)           |
-|   - Xuất cảnh báo (Alert) & Ghi vết điều tra (Investigation Log)            |
-+-----------------------------------------------------------------------------+
++-------------------------------------------------------------------------+
+|                  TẦNG 1: MICROSERVICES APPLICATION                      |
+|   +---------------------+         +----------------------------------+  |
+|   |   web-api (Node.js) |  <--->  |  Database / Services phụ trợ     |  |
+|   +---------------------+         +----------------------------------+  |
+|              | (Ghi nhận access/error logs ra stdout/stderr)            |
++--------------|----------------------------------------------------------+
+               |
+               v (/var/run/docker.sock)
++-------------------------------------------------------------------------+
+|                  TẦNG 2: THU THẬP LOG (LOG COLLECTOR)                   |
+|   +------------------------------------------------------------------+  |
+|   |  Promtail Agent (Cào log JSON từ container theo nhãn thời gian)  |  |
+|   +------------------------------------------------------------------+  |
++--------------|----------------------------------------------------------+
+               | (HTTP Push - Port :3100)
+               v
++-------------------------------------------------------------------------+
+|                  TẦNG 3: LƯU TRỮ TẬP TRUNG (LOG STORAGE)                 |
+|   +------------------------------------------------------------------+  |
+|   |  Grafana Loki Server (Lưu trữ log phân tán, truy vấn qua LogQL)  |  |
+|   +------------------------------------------------------------------+  |
+|              |                                                          |
+|              +---> [Grafana Dashboard - Trực quan hoá thời gian thực]    |
++--------------|----------------------------------------------------------+
+               | (Truy vấn Stream định kỳ qua Loki HTTP API)
+               v
++-------------------------------------------------------------------------+
+|                  TẦNG 4: ĐỘNG CƠ AI PHÁT HIỆN XÂM NHẬP                  |
+|                                                                         |
+|  [ Giai đoạn 1: Autoencoder (Unsupervised Anomaly Detection) ]          |
+|  - Tính Reconstruction Error.                                           |
+|  - Nếu Error < Ngưỡng: Lưu lượng bình thường (Bỏ qua).                   |
+|  - Nếu Error >= Ngưỡng: Đánh dấu BẤT THƯỜNG ---> Chuyển sang GĐ 2.      |
+|                                  |                                      |
+|                                  v                                      |
+|  [ Giai đoạn 2: Hybrid CNN-LSTM + Attention (Threat Classifier) ]       |
+|  - CNN: Trích xuất đặc trưng cụm từ/chuỗi mã lỗi trong log.             |
+|  - Bi-LSTM + Attention: Bắt ngữ cảnh chuỗi thời gian của đợt tấn công.  |
+|  - Phân loại nhãn: DoS/DDoS, Brute-Force, Web Attack...                 |
+|                                  |                                      |
+|                                  v                                      |
+|  [ Cảnh báo & Điều tra (Alerting & Automated Investigation Logging) ]   |
++-------------------------------------------------------------------------+
 
-2. CHI TIẾT TỪNG TẦNG CÔNG NGHỆ (TECH STACK)
+⚙️ 3. Chi tiết chức năng từng phân tầng
 
-Tầng 1: Nguồn dữ liệu (Microservices Tier)
+🔹 Tầng 1: Microservices Application Tier
 
-  - Công nghệ: Docker, Docker Compose, Node.js (Express framework).
-  - Cơ chế sinh log: Sử dụng chuẩn Docker logging driver dạng json-file. Mọi
-    hành động từ người dùng (truy cập hợp lệ, lỗi đăng nhập 401, lỗi máy
-    chủ 500) đều được format thành chuỗi JSON và bắn vào stdout/stderr.
+  - Thành phần: Ứng dụng mẫu đa tầng (web-api-service) chạy Node.js/Express.
+  - Nhiệm vụ: Mô phỏng ứng dụng thực tế cung cấp các endpoint công khai và bảo
+    mật (/, /api/login). Toàn bộ hoạt động được ghi nhận có cấu trúc (JSON
+    Format) qua stdout.
 
-Tầng 2: Thu thập log (Collector Agent Tier)
+🔹 Tầng 2: Log Collection Tier (Promtail)
 
-  - Công nghệ: Grafana Promtail.
-  - Cơ chế: Kết nối trực tiếp vào docker.sock của hệ điều hành host, lắng nghe
-    sự kiện từ các container đang chạy. Khi có log mới, Promtail bóc tách chuỗi,
-    tự động gán nhãn (container="web-api-service", stream="stdout") và đẩy qua
-    HTTP tới Loki.
+  - Thành phần: Container promtail-agent.
+  - Nhiệm vụ: Mount trực tiếp socket /var/run/docker.sock trên máy host để giám
+    sát vòng đời các container. Tự động gắn nhãn metadata (tên container,
+    stream, image) và gửi dữ liệu về Loki theo thời gian thực mà không làm giảm
+    hiệu năng của ứng dụng chính.
 
-Tầng 3: Lưu trữ tập trung (Centralized Storage Tier)
+🔹 Tầng 3: Centralized Storage Tier (Grafana Loki)
 
-  - Công nghệ: Grafana Loki.
-  - Cơ chế: Khác với Elasticsearch tiêu tốn nhiều RAM, Loki chỉ lập chỉ mục
-    (index) các metadata/labels thay vì toàn bộ nội dung text, giúp hệ thống
-    chạy mượt trên hạ tầng máy chủ cục bộ hoặc laptop cá nhân. Dữ liệu log được
-    nén thành các chunk và sẵn sàng cho truy vấn thông qua giao thức HTTP REST
-    API.
+  - Thành phần: Container loki-server.
+  - Nhiệm vụ: Khác với Elasticsearch lưu toàn bộ nội dung văn bản làm tốn nhiều
+    RAM, Loki chỉ lập chỉ mục (index) các nhãn metadata, giúp tối ưu bộ nhớ cục
+    bộ (phù hợp máy cá nhân/server nhỏ). Loki cung cấp REST API cho phép tầng AI
+    truy vấn dữ liệu dạng sliding window bằng ngôn ngữ LogQL.
 
-Tầng 4: Bộ máy AI 2 giai đoạn (Điểm nhấn học thuật của đề tài)
+🔹 Tầng 4: Two-Stage Deep Learning Pipeline Tier
 
-  - Giai đoạn 1 (Lọc bất thường không giám sát):
-      - Mô hình: LSTM Autoencoder.
-      - Mục tiêu: Được huấn luyện thuần túy trên log hệ thống chạy bình thường.
-        Khi gặp các chuỗi log bất thường (tấn công đột ngột, lưu lượng dị biến),
-        mô hình không thể tái tạo lại chuỗi này một cách chính xác \rightarrow
-        Sai số tái tạo (Reconstruction Error) tăng vọt vượt ngưỡng cho phép
-        \rightarrow Đánh dấu Anomaly.
-  - Giai đoạn 2 (Phân loại mối đe dọa chuyên sâu):
-      - Mô hình: Hybrid 1D-CNN + Bi-LSTM with Attention Layer.
-      - Mục tiêu: Chỉ được kích hoạt khi Giai đoạn 1 báo cờ đỏ. Lớp 1D-CNN nhanh
-        chóng trích xuất các đặc trưng từ vựng cục bộ độc hại; Bi-LSTM nắm bắt
-        ngữ cảnh chuỗi trước/sau; và Attention layer tập trung vào các từ khóa
-        trọng yếu (như IP, URL, User-Agent lạ, Status Code) để định danh chính
-        xác loại tấn công:
-          - Brute-Force Attack
-          - DoS / DDoS Attack (Traffic flooding)
-          - Unknown Anomaly / Zero-day
-      - Kết quả đầu ra: Kích hoạt thông báo cảnh báo và lưu vết điều tra thời
-        gian thực.
+Điểm cải tiến cốt lõi của đề tài nhằm vượt trội so với các nghiên cứu một mô
+hình truyền thống:
 
-3. CẤU TRÚC THƯ MỤC DỰ ÁN (PROJECT DIRECTORY)
+1.  Stage 1 (LSTM Autoencoder - Anomaly Detector):
+      - Huấn luyện hoàn toàn trên dữ liệu hành vi bình thường (Normal Baseline).
+      - Mô hình học cách giải mã và tái tạo lại chuỗi log thông thường.
+      - Khi có bất thường (kể cả dạng tấn công chưa từng gặp - Zero-day), sai số
+        tái tạo (Reconstruction Error) vượt ngưỡng động cho phép, kích hoạt
+        Stage 2.
+2.  Stage 2 (Hybrid CNN-LSTM with Attention - Threat Classifier):
+      - Chỉ được kích hoạt khi Stage 1 gắn cờ bất thường, giúp tiết kiệm tối đa
+        chu kỳ CPU/GPU.
+      - Lớp 1D-CNN quét các pattern độc hại trong câu log.
+      - Lớp Bi-LSTM nắm bắt sự phụ thuộc thời gian giữa các request.
+      - Cơ chế Attention tập trung trọng số vào các sự kiện then chốt (như dồn
+        dập mã 401 hoặc tràn mã 500).
+      - Đầu ra phân loại chính xác hình thức tấn công (Brute-force, DDoS, Scan)
+        và lưu vào kho điều tra (Investigation Alert Logs).
+
+📁 4. Cấu trúc thư mục dự án
 
 ids-microservices/
-├── README.md                 # Tài liệu hướng dẫn kiến trúc & vận hành
-├── docker-compose.yml        # Điều phối toàn bộ dịch vụ (Web, Loki, Promtail)
-├── promtail-config.yaml      # Cấu hình Scrape Job cho Promtail Agent
-├── backend_app/              # Mã nguồn dịch vụ Microservice mẫu
-│   ├── Dockerfile            # Đóng gói Node.js App container
-│   ├── package.json          # Quản lý dependencies
-│   └── server.js             # API web & cơ chế xuất Structured Logging
-└── ai_pipeline/              # Động cơ AI phân tích log (Triển khai giai đoạn tiếp theo)
-    ├── model_stage1_ae.py    # Autoencoder phục vụ Anomaly Detection
-    ├── model_stage2_clf.py   # Hybrid CNN-LSTM phục vụ Threat Classification
-    └── stream_detector.py    # Script lắng nghe Loki API và kích hoạt 2 model
+├── README.md                 # Tài liệu thuyết minh kiến trúc (File này)
+├── docker-compose.yml        # Điều phối toàn bộ các container dịch vụ
+├── promtail-config.yaml      # File cấu hình cào log Docker của Promtail
+├── backend_app/              # Mã nguồn ứng dụng mẫu
+│   ├── Dockerfile            # Đóng gói image cho backend
+│   └── server.js             # API Express sinh log
+└── ai_engine/                # (Sẽ triển khai ở Giai đoạn 3)
+    ├── train_autoencoder.py  # Huấn luyện mô hình Stage 1
+    ├── train_classifier.py   # Huấn luyện mô hình Stage 2
+    └── inference_pipeline.py # Script lắng nghe Loki và chạy mô hình 2 giai đoạn
 
-4. HƯỚNG DẪN KHỞI CHẠY HẠ TẦNG (QUICK START)
+🚀 5. Hướng dẫn khởi chạy và vận hành nhanh
 
-Yêu cầu môi trường
+1. Khởi động hạ tầng
 
-  - Hệ điều hành: Ubuntu 20.04/22.04 LTS (hoặc Ubuntu chạy trên WSL2 / Cloud
-    Server).
-  - Đã cài đặt: Docker Engine & Docker Compose Plugin.
+Tại terminal của thư mục dự án, chạy lệnh:
 
-Các lệnh vận hành nhanh (Thực thi tại Terminal VS Code)
+docker compose up -d --build
 
-1.  Khởi chạy toàn bộ hệ thống nền tảng:
+Kiểm tra trạng thái các container:
 
-    docker compose up -d --build
+docker compose ps
 
-2.  Kiểm tra trạng thái container:
+(Đảm bảo cả web-api-service, loki-server, và promtail-agent đều đang ở trạng
+thái running).
 
-    docker compose ps
+2. Sinh log kiểm tra kết nối
 
-    (Đảm bảo cả 3 dịch vụ web-api-service, loki-server, promtail-agent đều đang
-    ở trạng thái running).
+Gửi request bình thường:
 
-3.  Sinh dữ liệu log mẫu:
+curl http://localhost:3000/
 
-      - Log bình thường (HTTP 200):
-        curl http://localhost:3000/
-      - Log lỗi đăng nhập / Giả lập Brute-force (HTTP 401):
-        curl -X POST http://localhost:3000/api/login \
-             -H "Content-Type: application/json" \
-             -d '{"username":"attacker","password":"password123"}'
+Gửi request kích hoạt log cảnh báo (đăng nhập thất bại):
 
-4.  Kiểm tra luồng log trên Loki:
+curl -X POST http://localhost:3000/api/login \
+     -H "Content-Type: application/json" \
+     -d '{"username":"attacker","password":"badpassword"}'
 
-    curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
-      --data-urlencode 'query={container="web-api-service"}'
+3. Kiểm tra log từ Loki API
 
-5.  Dừng hệ thống khi không sử dụng:
+Truy vấn trực tiếp từ Loki xem log đã được thu thập hay chưa:
 
-    docker compose down
+curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
+  --data-urlencode 'query={container="web-api-service"}' | grep -o 'LOGIN_FAILED'
+
+
 
