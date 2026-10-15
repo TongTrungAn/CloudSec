@@ -30,50 +30,36 @@ Dự án này đề xuất một **Kiến trúc IDS 2 giai đoạn (Two-Stage Pi
 Hệ thống được tổ chức thành 4 phân tầng độc lập theo luồng dữ liệu (Data Pipeline) từ lúc sinh log cho tới khi đưa ra cảnh báo:
 
 
-+-------------------------------------------------------------------------+
-|                  TẦNG 1: MICROSERVICES APPLICATION                      |
-|   +---------------------+         +----------------------------------+  |
-|   |   web-api (Node.js) |  <--->  |  Database / Services phụ trợ     |  |
-|   +---------------------+         +----------------------------------+  |
-|              | (Ghi nhận access/error logs ra stdout/stderr)            |
-+--------------|----------------------------------------------------------+
-               |
-               v (/var/run/docker.sock)
-+-------------------------------------------------------------------------+
-|                  TẦNG 2: THU THẬP LOG (LOG COLLECTOR)                   |
-|   +------------------------------------------------------------------+  |
-|   |  Promtail Agent (Cào log JSON từ container theo nhãn thời gian)  |  |
-|   +------------------------------------------------------------------+  |
-+--------------|----------------------------------------------------------+
-               | (HTTP Push - Port :3100)
-               v
-+-------------------------------------------------------------------------+
-|                  TẦNG 3: LƯU TRỮ TẬP TRUNG (LOG STORAGE)                 |
-|   +------------------------------------------------------------------+  |
-|   |  Grafana Loki Server (Lưu trữ log phân tán, truy vấn qua LogQL)  |  |
-|   +------------------------------------------------------------------+  |
-|              |                                                          |
-|              +---> [Grafana Dashboard - Trực quan hoá thời gian thực]    |
-+--------------|----------------------------------------------------------+
-               | (Truy vấn Stream định kỳ qua Loki HTTP API)
-               v
-+-------------------------------------------------------------------------+
-|                  TẦNG 4: ĐỘNG CƠ AI PHÁT HIỆN XÂM NHẬP                  |
-|                                                                         |
-|  [ Giai đoạn 1: Autoencoder (Unsupervised Anomaly Detection) ]          |
-|  - Tính Reconstruction Error.                                           |
-|  - Nếu Error < Ngưỡng: Lưu lượng bình thường (Bỏ qua).                   |
-|  - Nếu Error >= Ngưỡng: Đánh dấu BẤT THƯỜNG ---> Chuyển sang GĐ 2.      |
-|                                  |                                      |
-|                                  v                                      |
-|  [ Giai đoạn 2: Hybrid CNN-LSTM + Attention (Threat Classifier) ]       |
-|  - CNN: Trích xuất đặc trưng cụm từ/chuỗi mã lỗi trong log.             |
-|  - Bi-LSTM + Attention: Bắt ngữ cảnh chuỗi thời gian của đợt tấn công.  |
-|  - Phân loại nhãn: DoS/DDoS, Brute-Force, Web Attack...                 |
-|                                  |                                      |
-|                                  v                                      |
-|  [ Cảnh báo & Điều tra (Alerting & Automated Investigation Logging) ]   |
-+-------------------------------------------------------------------------+
+```mermaid
+graph TD
+    subgraph TANG1 ["TẦNG 1: MICROSERVICES APPLICATION"]
+        A[web-api: Node.js/Express] <--> B[Database / Phụ trợ]
+        A -.->|stdout / stderr JSON| DOCKER_SOCK[Docker Socket: /var/run/docker.sock]
+    end
+
+    subgraph TANG2 ["TẦNG 2: THU THẬP LOG (LOG COLLECTOR)"]
+        DOCKER_SOCK --> C[Promtail Agent: Cào log tự động theo nhãn]
+    end
+
+    subgraph TANG3 ["TẦNG 3: LƯU TRỮ TẬP TRUNG (LOG STORAGE)"]
+        C -->|HTTP Push Port 3100| D[Grafana Loki Server]
+        D -.-> E[Grafana Dashboard: Giám sát trực quan]
+    end
+
+    subgraph TANG4 ["TẦNG 4: ĐỘNG CƠ AI 2 GIAI ĐOẠN"]
+        D -->|Query API / Sliding Window| F["Giai đoạn 1: LSTM Autoencoder<br/>(Unsupervised Anomaly Detection)"]
+        F -->|Error < Ngưỡng| G[Normal Traffic: Bỏ qua]
+        F -->|Error >= Ngưỡng| H["Giai đoạn 2: Hybrid CNN-LSTM + Attention<br/>(Threat Classifier)"]
+        H --> I["Phân loại: DDoS, Brute-Force, Web Attack..."]
+        I --> J["Cảnh báo & Ghi log điều tra (Alerts & Logging)"]
+    end
+
+    style TANG1 fill:#f9f9f9,stroke:#333,stroke-width:1px
+    style TANG2 fill:#f0f7ff,stroke:#0366d6,stroke-width:1px
+    style TANG3 fill:#fff8f0,stroke:#d97706,stroke-width:1px
+    style TANG4 fill:#f5f3ff,stroke:#7c3aed,stroke-width:1px
+    style H fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+```
 
 ⚙️ 3. Chi tiết chức năng từng phân tầng
 
@@ -122,7 +108,7 @@ hình truyền thống:
         và lưu vào kho điều tra (Investigation Alert Logs).
 
 📁 4. Cấu trúc thư mục dự án
-
+```
 ids-microservices/
 ├── README.md                 # Tài liệu thuyết minh kiến trúc (File này)
 ├── docker-compose.yml        # Điều phối toàn bộ các container dịch vụ
@@ -134,7 +120,7 @@ ids-microservices/
     ├── train_autoencoder.py  # Huấn luyện mô hình Stage 1
     ├── train_classifier.py   # Huấn luyện mô hình Stage 2
     └── inference_pipeline.py # Script lắng nghe Loki và chạy mô hình 2 giai đoạn
-
+```
 🚀 5. Hướng dẫn khởi chạy và vận hành nhanh
 
 1. Khởi động hạ tầng
