@@ -1,159 +1,85 @@
-Dưới đây là nội dung hoàn chỉnh của file README.md theo chuẩn tài liệu dự án kỹ
-thuật (Technical Project Documentation). Bạn chỉ cần tạo file tên README.md ngay
-tại thư mục gốc của dự án (~/ids-microservices/README.md) và dán toàn bộ nội
-dung sau vào.
+# CloudSec-Core: Comprehensive Security Ecosystem for Private Cloud
 
-File này giải thích toàn diện từ bài toán, kiến trúc hệ thống 4 tầng, pipeline
-AI 2 giai đoạn, luồng hoạt động đến hướng dẫn cài đặt và kiểm tra.
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-brightgreen.svg)](https://www.python.org/)
+[![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-red.svg)](https://pytorch.org/)
+[![MinIO S3](https://img.shields.io/badge/Storage-MinIO%20S3-orange.svg)](https://min.io/)
 
-# 🛡️ Two-Stage AI-Driven Intrusion Detection System (IDS) for Local Microservices/Cloud Infrastructure
-
-> **Tên đề tài tiếng Anh:** *A Two-Stage Intelligent Intrusion Detection System for Microservices: Combining Unsupervised Anomaly Detection and Supervised Hybrid Deep Learning for Automated Threat Classification*  
-> **Môn học:** Đồ án 3 (Chuyên ngành An toàn thông tin / Khoa học máy tính)  
-> **Môi trường triển khai:** Docker / Docker Compose trên nền tảng Linux (Ubuntu Server) thông qua VS Code CLI.
+> **Tên đề tài**: Hệ thống bảo mật toàn diện cho đám mây riêng: Tích hợp mã hóa dữ liệu đầu cuối và giám sát an ninh thông minh dựa trên học sâu  
+> **Mã dự án**: `CloudSec-Core`  
+> **Mục tiêu**: Đồ án tốt nghiệp Kỹ sư An toàn thông tin & Bài báo Nghiên cứu Khoa học (NCKH).
 
 ---
 
-## 📌 1. Giới thiệu tổng quan
+## 1. Tổng quan Kiến trúc Hệ thống
 
-Trong môi trường Microservices đóng gói container (Docker/Cloud), việc giám sát an ninh bằng phương pháp dựa trên luật (Rule-based) hoặc chỉ phân tích gói tin mạng tĩnh truyền thống bộc lộ nhiều điểm yếu:
-- Tỉ lệ báo động giả (False Positive) cao do lưu lượng nội bộ thay đổi liên tục.
-- Không phát hiện được các mối đe dọa mới xuất hiện (Zero-day attacks).
-- Tiêu tốn nhiều tài nguyên hệ thống nếu mô hình Deep Learning quá nặng.
+CloudSec-Core giải quyết bài toán an toàn dữ liệu trên nền tảng Private Cloud theo mô hình đa lớp (Defense-in-Depth):
 
-Dự án này đề xuất một **Kiến trúc IDS 2 giai đoạn (Two-Stage Pipeline)** kết hợp giữa **Học không giám sát (Unsupervised)** và **Học sâu lai có giám sát (Supervised Hybrid Deep Learning)**, tích hợp trực tiếp vào hạ tầng giám sát log thời gian thực với **Promtail + Grafana Loki**.
+1. **Tầng Lưu trữ & Mã hóa đầu cuối (Client-Side E2EE)**:
+   - Dữ liệu được mã hóa ngay tại phía Client trước khi truyền tải và lưu trữ trên MinIO S3 bằng **AES-256-GCM** và **ChaCha20-Poly1305**.
+   - Cơ chế Envelope Encryption (Master Key / Data Key) bảo vệ khóa dữ liệu độc lập.
+   - Xác thực toàn vẹn dữ liệu (AEAD Authenticity Tag) ngăn chặn mọi hình thức Data Tampering trên Object Storage.
+2. **Tầng Giám sát & Phát hiện xâm nhập thông minh (AI / Deep Learning IDS)**:
+   - Thu thập chuỗi sự kiện truy cập thời gian thực qua Promtail & Loki.
+   - Mô hình học sâu **PyTorch LSTM / Bi-LSTM Autoencoder** học phân phối hành vi bình thường và kích hoạt cảnh báo tức thời khi phát hiện tấn công (Brute-force, DDoS request flood, Unauthorized access) với ngưỡng sai số động ($\mu + 3\sigma$).
+3. **Môi trường Multi-Agent System (.agents)**:
+   - Tự động hóa quá trình R&D, kiểm thử mã hóa, giả lập tấn công, đo lường benchmark và đồng bộ số liệu vào báo cáo luận văn.
 
 ---
 
-## 🏗️ 2. Sơ đồ kiến trúc tổng thể (System Architecture)
+## 2. Cấu trúc Thư mục Dự án
 
-Hệ thống được tổ chức thành 4 phân tầng độc lập theo luồng dữ liệu (Data Pipeline) từ lúc sinh log cho tới khi đưa ra cảnh báo:
-
-
-```mermaid
-graph TD
-    subgraph TANG1 ["TẦNG 1: MICROSERVICES APPLICATION"]
-        A[web-api: Node.js/Express] <--> B[Database / Phụ trợ]
-        A -.->|stdout / stderr JSON| DOCKER_SOCK[Docker Socket: /var/run/docker.sock]
-    end
-
-    subgraph TANG2 ["TẦNG 2: THU THẬP LOG (LOG COLLECTOR)"]
-        DOCKER_SOCK --> C[Promtail Agent: Cào log tự động theo nhãn]
-    end
-
-    subgraph TANG3 ["TẦNG 3: LƯU TRỮ TẬP TRUNG (LOG STORAGE)"]
-        C -->|HTTP Push Port 3100| D[Grafana Loki Server]
-        D -.-> E[Grafana Dashboard: Giám sát trực quan]
-    end
-
-    subgraph TANG4 ["TẦNG 4: ĐỘNG CƠ AI 2 GIAI ĐOẠN"]
-        D -->|Query API / Sliding Window| F["Giai đoạn 1: LSTM Autoencoder<br/>(Unsupervised Anomaly Detection)"]
-        F -->|Error < Ngưỡng| G[Normal Traffic: Bỏ qua]
-        F -->|Error >= Ngưỡng| H["Giai đoạn 2: Hybrid CNN-LSTM + Attention<br/>(Threat Classifier)"]
-        H --> I["Phân loại: DDoS, Brute-Force, Web Attack..."]
-        I --> J["Cảnh báo & Ghi log điều tra (Alerts & Logging)"]
-    end
-
-    style TANG1 fill:#f9f9f9,stroke:#333,stroke-width:1px
-    style TANG2 fill:#f0f7ff,stroke:#0366d6,stroke-width:1px
-    style TANG3 fill:#fff8f0,stroke:#d97706,stroke-width:1px
-    style TANG4 fill:#f5f3ff,stroke:#7c3aed,stroke-width:1px
-    style H fill:#fee2e2,stroke:#dc2626,stroke-width:2px
+```
+CloudSecu/
+├── .agents/                    # Hệ sinh thái Multi-Agent System Lab
+│   ├── AGENTS.md               # Hiến chương và quy ước hoạt động của các Agent
+│   ├── agents/                 # Hồ sơ 5 Agent chuyên trách (research-lead, crypto, ai, infra, evaluator)
+│   ├── rules/                  # Quy chuẩn mật mã, AI, Docker hardening, git mapping
+│   ├── skills/                 # Thư viện kỹ năng (MinIO, Benchmark, Deep Learning, Attacks, LaTeX)
+│   ├── tasks/                  # Task board theo từng chuyên môn (active/done)
+│   └── workflows/              # Kịch bản tự động hóa (/run-benchmark, /train-eval-ids, /thesis-sync)
+├── src/                        # Mã nguồn chính
+│   ├── crypto/                 # Module mã hóa AES-256-GCM, ChaCha20, Chunked Streaming
+│   ├── kms/                    # Quản lý vòng đời khóa (Envelope Encryption, CSPRNG, KDF)
+│   └── ai_ids/                 # Mô hình PyTorch LSTM Autoencoder, Pipeline trích xuất đặc trưng
+├── deploy/                     # Docker Compose và hạ tầng MinIO, Loki, Promtail
+├── config/infra/               # Cấu hình dịch vụ (MinIO policies, Loki config, Promtail config)
+├── benchmarks/                 # Bộ đo đạc Throughput, Latency, Overhead, Locust scenarios
+├── scripts/
+│   ├── infra/                  # Healthcheck, khởi tạo bucket S3
+│   └── attacks/                # Giả lập tấn công (Brute-force, Flood, Data Tampering)
+├── docs/thesis/                # Bản thảo 5 chương Đồ án tốt nghiệp & Bài báo IEEE
+├── reports/                    # Biểu đồ khoa học (300 DPI), bảng LaTeX, CSV dữ liệu thô
+├── data/                       # Dữ liệu log huấn luyện và kiểm thử
+├── models/checkpoints/         # Trọng số mô hình đã huấn luyện (.pt, .pkl)
+├── tests/                      # Unit tests mật mã và AI pipeline
+├── requirements.txt            # Thư viện phụ thuộc
+└── .env.example                # Cấu hình biến môi trường mẫu
 ```
 
-⚙️ 3. Chi tiết chức năng từng phân tầng
+---
 
-🔹 Tầng 1: Microservices Application Tier
+## 3. Các Lệnh Tự động hóa Nhanh (Workflows)
 
-  - Thành phần: Ứng dụng mẫu đa tầng (web-api-service) chạy Node.js/Express.
-  - Nhiệm vụ: Mô phỏng ứng dụng thực tế cung cấp các endpoint công khai và bảo
-    mật (/, /api/login). Toàn bộ hoạt động được ghi nhận có cấu trúc (JSON
-    Format) qua stdout.
+| Lệnh | File quy trình | Mô tả |
+| :--- | :--- | :--- |
+| `/run-benchmark` | `.agents/workflows/run-benchmark.md` | Chạy 30 vòng lặp đo Throughput & Latency Plaintext vs AES-GCM trên MinIO $\to$ Xuất biểu đồ `reports/crypto_overhead.png`. |
+| `/train-eval-ids` | `.agents/workflows/train-eval-ids.md` | Tiền xử lý log, huấn luyện PyTorch LSTM Autoencoder $\to$ Xuất báo cáo F1-Score & Ma trận nhầm lẫn IEEE. |
+| `/thesis-sync` | `.agents/workflows/thesis-sync.md` | Tự động quét số liệu mới nhất trong `reports/` $\to$ Cập nhật vào bản thảo `docs/thesis/chapter4_results.md`. |
 
-🔹 Tầng 2: Log Collection Tier (Promtail)
+---
 
-  - Thành phần: Container promtail-agent.
-  - Nhiệm vụ: Mount trực tiếp socket /var/run/docker.sock trên máy host để giám
-    sát vòng đời các container. Tự động gắn nhãn metadata (tên container,
-    stream, image) và gửi dữ liệu về Loki theo thời gian thực mà không làm giảm
-    hiệu năng của ứng dụng chính.
+## 4. Hướng dẫn Khởi động Nhanh
 
-🔹 Tầng 3: Centralized Storage Tier (Grafana Loki)
-
-  - Thành phần: Container loki-server.
-  - Nhiệm vụ: Khác với Elasticsearch lưu toàn bộ nội dung văn bản làm tốn nhiều
-    RAM, Loki chỉ lập chỉ mục (index) các nhãn metadata, giúp tối ưu bộ nhớ cục
-    bộ (phù hợp máy cá nhân/server nhỏ). Loki cung cấp REST API cho phép tầng AI
-    truy vấn dữ liệu dạng sliding window bằng ngôn ngữ LogQL.
-
-🔹 Tầng 4: Two-Stage Deep Learning Pipeline Tier
-
-Điểm cải tiến cốt lõi của đề tài nhằm vượt trội so với các nghiên cứu một mô
-hình truyền thống:
-
-1.  Stage 1 (LSTM Autoencoder - Anomaly Detector):
-      - Huấn luyện hoàn toàn trên dữ liệu hành vi bình thường (Normal Baseline).
-      - Mô hình học cách giải mã và tái tạo lại chuỗi log thông thường.
-      - Khi có bất thường (kể cả dạng tấn công chưa từng gặp - Zero-day), sai số
-        tái tạo (Reconstruction Error) vượt ngưỡng động cho phép, kích hoạt
-        Stage 2.
-2.  Stage 2 (Hybrid CNN-LSTM with Attention - Threat Classifier):
-      - Chỉ được kích hoạt khi Stage 1 gắn cờ bất thường, giúp tiết kiệm tối đa
-        chu kỳ CPU/GPU.
-      - Lớp 1D-CNN quét các pattern độc hại trong câu log.
-      - Lớp Bi-LSTM nắm bắt sự phụ thuộc thời gian giữa các request.
-      - Cơ chế Attention tập trung trọng số vào các sự kiện then chốt (như dồn
-        dập mã 401 hoặc tràn mã 500).
-      - Đầu ra phân loại chính xác hình thức tấn công (Brute-force, DDoS, Scan)
-        và lưu vào kho điều tra (Investigation Alert Logs).
-
-📁 4. Cấu trúc thư mục dự án
+### 4.1. Cài đặt Môi trường Python
+```powershell
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
 ```
-ids-microservices/
-├── README.md                 # Tài liệu thuyết minh kiến trúc (File này)
-├── docker-compose.yml        # Điều phối toàn bộ các container dịch vụ
-├── promtail-config.yaml      # File cấu hình cào log Docker của Promtail
-├── backend_app/              # Mã nguồn ứng dụng mẫu
-│   ├── Dockerfile            # Đóng gói image cho backend
-│   └── server.js             # API Express sinh log
-└── ai_engine/                # (Sẽ triển khai ở Giai đoạn 3)
-    ├── train_autoencoder.py  # Huấn luyện mô hình Stage 1
-    ├── train_classifier.py   # Huấn luyện mô hình Stage 2
-    └── inference_pipeline.py # Script lắng nghe Loki và chạy mô hình 2 giai đoạn
+
+### 4.2. Khởi chạy Cụm Hạ tầng Private Cloud (Docker)
+```powershell
+docker-compose -f deploy/docker-compose.yml up -d
+python scripts/infra/healthcheck.py
 ```
-🚀 5. Hướng dẫn khởi chạy và vận hành nhanh
-
-1. Khởi động hạ tầng
-
-Tại terminal của thư mục dự án, chạy lệnh:
-
-docker compose up -d --build
-
-Kiểm tra trạng thái các container:
-
-docker compose ps
-
-(Đảm bảo cả web-api-service, loki-server, và promtail-agent đều đang ở trạng
-thái running).
-
-2. Sinh log kiểm tra kết nối
-
-Gửi request bình thường:
-
-curl http://localhost:3000/
-
-Gửi request kích hoạt log cảnh báo (đăng nhập thất bại):
-
-curl -X POST http://localhost:3000/api/login \
-     -H "Content-Type: application/json" \
-     -d '{"username":"attacker","password":"badpassword"}'
-
-3. Kiểm tra log từ Loki API
-
-Truy vấn trực tiếp từ Loki xem log đã được thu thập hay chưa:
-
-curl -G -s "http://localhost:3100/loki/api/v1/query_range" \
-  --data-urlencode 'query={container="web-api-service"}' | grep -o 'LOGIN_FAILED'
-
-
-

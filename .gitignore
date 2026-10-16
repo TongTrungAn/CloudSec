@@ -1,0 +1,84 @@
+# ==========================================
+# 1. Bảo mật & Biến môi trường (CRITICAL)
+# ==========================================
+.env
+*.env
+*.pem
+*.key
+*.crt
+*.csr
+secrets/
+keys/
+
+# ==========================================
+# 2. Python & Môi trường ảo
+# ==========================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# ==========================================
+# 3. AI / Machine Learning (Data & Models)
+# ==========================================
+# Bỏ qua datasets lớn
+data/raw/
+data/processed/
+*.pcap
+*.csv.gz
+*.zip
+
+# Giữ cấu trúc thư mục data nhưng không commit file dữ liệu
+data/*
+!data/.gitkeep
+
+# Bỏ qua trọng số mô hình lớn
+models/*.pth
+models/*.pt
+models/*.h5
+models/*.onnx
+models/checkpoints/*
+!models/checkpoints/.gitkeep
+/checkpoints/
+
+# ==========================================
+# 4. Cloud, Docker & Runtime Data
+# ==========================================
+# Dữ liệu volume MinIO mount ra ngoài
+minio_data/
+minio_storage/
+
+# Log files
+*.log
+logs/
+loki_data/
+
+# ==========================================
+# 5. IDE & Hệ điều hành
+# ==========================================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db

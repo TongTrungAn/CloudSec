@@ -1,0 +1,30 @@
+# CloudSec-Core Dependencies
+
+# Cryptography & Security
+cryptography>=42.0.0
+pycryptodome>=3.20.0
+
+# Cloud & S3 SDK
+boto3>=1.34.0
+botocore>=1.34.0
+requests>=2.31.0
+
+# Deep Learning & AI IDS
+torch>=2.2.0
+torchvision>=0.17.0
+numpy>=1.26.0
+pandas>=2.2.0
+scikit-learn>=1.4.0
+
+# Benchmarking & Performance Profiling
+psutil>=5.9.0
+locust>=2.24.0
+
+# Data Visualization & IEEE Reporting
+matplotlib>=3.8.0
+seaborn>=0.13.0
+
+# Testing & Utilities
+pytest>=8.0.0
+python-dotenv>=1.0.0
+tqdm>=4.66.0
